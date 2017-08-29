@@ -31,6 +31,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"reflect"
 )
 
 type CgroupSubsystems struct {
@@ -137,10 +138,31 @@ func GetStats(cgroupManager cgroups.Manager, rootFs string, pid int, ignoreMetri
 
 	// For backwards compatibility.
 	if len(stats.Network.Interfaces) > 0 {
-		stats.Network.InterfaceStats = stats.Network.Interfaces[0]
+		//stats.Network.InterfaceStats = stats.Network.Interfaces[0]
+		stats.Network.InterfaceStats = sumNetworkStats(stats)
 	}
 
 	return stats, nil
+}
+
+func sumNetworkStats(stats *info.ContainerStats) info.InterfaceStats {
+	interfaceStats := stats.Network.Interfaces[0]
+	interfaceStats.Name = "ethall"
+	t0 := reflect.TypeOf(interfaceStats)
+	v0 := reflect.ValueOf(&interfaceStats).Elem()
+	for i := 1; i < len(stats.Network.Interfaces); i++ {
+		interfaceStatsOfi := stats.Network.Interfaces[i]
+		vi := reflect.ValueOf(interfaceStatsOfi)
+
+		for k := 1; k < t0.NumField(); k++ {
+			fieldName := t0.Field(k).Name
+			value0 := v0.Field(k).Interface().(uint64)
+			valuei := vi.Field(k).Interface().(uint64)
+			field := v0.FieldByName(fieldName)
+			field.SetUint(value0 + valuei)
+		}
+	}
+	return interfaceStats
 }
 
 func networkStatsFromProc(rootFs string, pid int) ([]info.InterfaceStats, error) {
@@ -512,7 +534,8 @@ func setNetworkStats(libcontainerStats *libcontainer.Stats, ret *info.ContainerS
 
 	// Add to base struct for backwards compatibility.
 	if len(ret.Network.Interfaces) > 0 {
-		ret.Network.InterfaceStats = ret.Network.Interfaces[0]
+		//ret.Network.InterfaceStats = ret.Network.Interfaces[0]
+		ret.Network.InterfaceStats = sumNetworkStats(ret)
 	}
 }
 
